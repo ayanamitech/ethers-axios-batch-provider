@@ -78,8 +78,9 @@ import AxiosBatchProvider from 'ethers-axios-batch-provider';
 
 const provider = new AxiosBatchProvider('rpc-host-here');
 
-provider.getBlockNumber().then(blockNumber => {
-  // Will return something like 10000
-  console.log(blockNumber);
-});
+Promise.all([
+  provider.getBlockNumber(),
+  provider.getBlock('latest'),
+  provider.getBlockWithTransactions('latest')
+]).then(result => console.log(result));
 ```
