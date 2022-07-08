@@ -1,0 +1,208 @@
+'use strict';
+
+var axiosAuto = require('axios-auto');
+var ethers = require('ethers');
+var assert = require('assert');
+var axios = require('axios');
+var MockAdapter = require('axios-mock-adapter');
+
+function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
+
+var axios__default = /*#__PURE__*/_interopDefaultLegacy(axios);
+var MockAdapter__default = /*#__PURE__*/_interopDefaultLegacy(MockAdapter);
+
+const version = "ethers-axios-batch-provider@5.6.9";
+
+const logger = new ethers.utils.Logger(version);
+class AxiosBatchProvider extends ethers.providers.JsonRpcProvider {
+  constructor(urlOrConfig, extraConfig, network) {
+    if (typeof urlOrConfig === "object" && !urlOrConfig.url) {
+      logger.throwArgumentError("missing node url", "urlOrConfig", urlOrConfig);
+    }
+    const axiosConfig = {
+      url: typeof urlOrConfig === "string" ? urlOrConfig : urlOrConfig.url
+    };
+    if (typeof urlOrConfig === "object") {
+      Object.assign(axiosConfig, urlOrConfig);
+    }
+    if (extraConfig) {
+      Object.assign(axiosConfig, extraConfig);
+    }
+    super(axiosConfig.url.replace(/\s+/g, "").split(",")[0], network);
+    this.requestId = 1;
+    this.axiosConfig = axiosConfig;
+    this._pendingBatchAggregator = null;
+    this._pendingBatch = null;
+  }
+  send(method, params) {
+    var _a;
+    if (method === "eth_chainId" && ((_a = this._network) == null ? void 0 : _a.chainId)) {
+      return new Promise((resolve) => {
+        var _a2;
+        return resolve((_a2 = this._network) == null ? void 0 : _a2.chainId);
+      });
+    }
+    const url = Object.assign({}, this.axiosConfig).url;
+    const payload = {
+      method,
+      params,
+      id: this.requestId++,
+      jsonrpc: "2.0"
+    };
+    const options = Object.assign({}, this.axiosConfig);
+    delete options.url;
+    const sendTxMethods = ["eth_sendRawTransaction", "eth_sendTransaction"];
+    const sendTransaction = sendTxMethods.includes(method) ? true : false;
+    if (sendTransaction && url.replace(/\s+/g, "").split(",").length > 0) {
+      throw new Error("AxiosBatchProvider: eth_sendRawTransaction not supported with multiple nodes");
+    }
+    if (options.filter === void 0) {
+      const filter = (data, count, retryMax) => {
+        if (typeof count === "number" && typeof retryMax === "number" && data.error) {
+          const message = typeof data.error.message === "string" ? data.error.message : typeof data.error === "string" ? data.error : typeof data.error === "object" ? JSON.stringify(data.error) : "";
+          if (count < retryMax + 1) {
+            throw new Error(message);
+          }
+        } else if (Array.isArray(data)) {
+          const errorArray = data.map((d) => {
+            if (typeof count === "number" && typeof retryMax === "number" && d.error) {
+              const message = typeof d.error.message === "string" ? d.error.message : typeof d.error === "string" ? d.error : typeof d.error === "object" ? JSON.stringify(d.error) : "";
+              if (count < retryMax + 1) {
+                return new Error(message);
+              }
+            }
+          }).filter((d) => d);
+          if (errorArray.length > 0) {
+            throw errorArray;
+          }
+        }
+      };
+      options.filter = filter;
+    }
+    if (this._pendingBatch == null) {
+      this._pendingBatch = [];
+    }
+    const inflightRequest = { request: payload, resolve: null, reject: null };
+    const promise = new Promise((resolve, reject) => {
+      inflightRequest.resolve = resolve;
+      inflightRequest.reject = reject;
+    });
+    this._pendingBatch.push(inflightRequest);
+    if (!this._pendingBatchAggregator) {
+      this._pendingBatchAggregator = setTimeout(() => {
+        const array = [];
+        const batch = Object.assign(array, this._pendingBatch);
+        this._pendingBatch = null;
+        this._pendingBatchAggregator = null;
+        const request = batch.map((inflight) => inflight.request);
+        return axiosAuto.post(url, JSON.stringify(request), options).then((result) => {
+          batch.forEach((inflightRequest2, index) => {
+            const payload2 = result[index];
+            if (payload2.error) {
+              const error = new Error(payload2.error.message);
+              error.code = payload2.error.code;
+              error.data = payload2.error.data;
+              inflightRequest2.reject(error);
+            } else {
+              inflightRequest2.resolve(payload2.result);
+            }
+          });
+        }, (error) => {
+          batch.forEach((inflightRequest2) => {
+            inflightRequest2.reject(error);
+          });
+        });
+      }, 10);
+    }
+    return promise;
+  }
+}
+
+describe("ethers-axios-batch-provider", () => {
+  it("eth_blockNumber", async () => {
+    const axiosInstance = axios__default["default"];
+    const mock = new MockAdapter__default["default"](axiosInstance, { onNoMatch: "throwException" });
+    const provider = new AxiosBatchProvider("/", { axios: axiosInstance, timeout: 100, retryMax: 0 });
+    const chainId = [{ "jsonrpc": "2.0", "id": 1, "result": "0x5" }];
+    const blockNumber = [{ "jsonrpc": "2.0", "id": 2, "result": "0x1" }];
+    mock.onPost("/", [{ "jsonrpc": "2.0", "id": 1, "method": "eth_chainId", "params": [] }]).reply(200, chainId).onPost("/", [{ "jsonrpc": "2.0", "id": 2, "method": "eth_blockNumber", "params": [] }]).reply(200, blockNumber);
+    const result = await provider.getBlockNumber();
+    assert.strict.deepEqual(result, 1);
+  });
+  it("batch test", async () => {
+    const axiosInstance = axios__default["default"];
+    const mock = new MockAdapter__default["default"](axiosInstance, { onNoMatch: "throwException" });
+    const provider = new AxiosBatchProvider("/", { axios: axiosInstance, timeout: 100, retryMax: 0 });
+    const chainId = [{ "jsonrpc": "2.0", "id": 1, "result": "0x38" }];
+    const getBlock = [
+      { "jsonrpc": "2.0", "id": 2, "result": "0x1" },
+      {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {
+          "difficulty": "0x2",
+          "extraData": "0xd883010002846765746888676f312e31332e34856c696e757800000000000000924cd67a1565fdd24dd59327a298f1d702d6b7a721440c063713cecb7229f4e162ae38be78f6f71aa5badeaaef35cea25061ee2100622a4a1631a07e862b517401",
+          "gasLimit": "0x25ff7a7",
+          "gasUsed": "0x300b37",
+          "hash": "0x04055304e432294a65ff31069c4d3092ff8b58f009cdb50eba5351e0332ad0f6",
+          "logsBloom": "0x08000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000",
+          "miner": "0x2a7cdd959bfe8d9487b2a43b33565295a698f7e2",
+          "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "nonce": "0x0000000000000000",
+          "number": "0x1",
+          "parentHash": "0x0d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5b",
+          "receiptsRoot": "0xfc7c0fda97e67ed8ae06e7a160218b3df995560dfcb209a3b0dddde969ec6b00",
+          "sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+          "size": "0x558",
+          "stateRoot": "0x1db428ea79cb2e8cc233ae7f4db7c3567adfcb699af668a9f583fdae98e95588",
+          "timestamp": "0x5f49ca59",
+          "totalDifficulty": "0x3",
+          "transactions": [
+            "0xbaf8ffa0b475a67cfeac3992d24422804452f0982e4e21a8816db2e0c9e5f224",
+            "0x8ea486df4eafaf713fbbe3b4b0b4196e50fbd1ea93daf66675accf3bf3f59d00",
+            "0x9ebc5237eabb339a103a34daf280db3d9498142b49fa47f1af71f64a605acffa",
+            "0xc043c5d33f8c3a6d6c0853ff8cbe88ebdf746f8092cb763b18de65db45246a6e",
+            "0x2f64d7e926e6fb62f906e18258097af179c213f0c87a717476cce1b334049797",
+            "0x463f0a179a89f47b055df14897dd7c55a2d819351568045dcb0496f2875c71ee",
+            "0xc02fd5fc71fe8bdc4fec3f97a019a4dc9961eb95e5251c55fcb3da76f5cb5bca"
+          ],
+          "transactionsRoot": "0x53a8743b873570daa630948b1858eaf5dc9bb0bca2093a197e507b2466c110a0",
+          "uncles": []
+        }
+      }
+    ];
+    mock.onPost("/", [{ "jsonrpc": "2.0", "id": 1, "method": "eth_chainId", "params": [] }]).reply(200, chainId).onPost("/", [
+      { "jsonrpc": "2.0", "id": 2, "method": "eth_blockNumber", "params": [] },
+      { "jsonrpc": "2.0", "id": 3, "method": "eth_getBlockByNumber", "params": ["latest", false] }
+    ]).reply(200, getBlock);
+    const result = await Promise.all([
+      provider.getBlockNumber(),
+      provider.getBlock("latest")
+    ]);
+    assert.strict.deepEqual(result, [
+      1,
+      {
+        "hash": "0x04055304e432294a65ff31069c4d3092ff8b58f009cdb50eba5351e0332ad0f6",
+        "parentHash": "0x0d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5b",
+        "number": 1,
+        "timestamp": 1598671449,
+        "nonce": "0x0000000000000000",
+        "difficulty": 2,
+        "gasLimit": ethers.BigNumber.from("0x25ff7a7"),
+        "gasUsed": ethers.BigNumber.from("0x300b37"),
+        "miner": "0x2a7cdd959bFe8D9487B2a43B33565295a698F7e2",
+        "extraData": "0xd883010002846765746888676f312e31332e34856c696e757800000000000000924cd67a1565fdd24dd59327a298f1d702d6b7a721440c063713cecb7229f4e162ae38be78f6f71aa5badeaaef35cea25061ee2100622a4a1631a07e862b517401",
+        "transactions": [
+          "0xbaf8ffa0b475a67cfeac3992d24422804452f0982e4e21a8816db2e0c9e5f224",
+          "0x8ea486df4eafaf713fbbe3b4b0b4196e50fbd1ea93daf66675accf3bf3f59d00",
+          "0x9ebc5237eabb339a103a34daf280db3d9498142b49fa47f1af71f64a605acffa",
+          "0xc043c5d33f8c3a6d6c0853ff8cbe88ebdf746f8092cb763b18de65db45246a6e",
+          "0x2f64d7e926e6fb62f906e18258097af179c213f0c87a717476cce1b334049797",
+          "0x463f0a179a89f47b055df14897dd7c55a2d819351568045dcb0496f2875c71ee",
+          "0xc02fd5fc71fe8bdc4fec3f97a019a4dc9961eb95e5251c55fcb3da76f5cb5bca"
+        ],
+        "_difficulty": ethers.BigNumber.from("0x2")
+      }
+    ]);
+  });
+});
