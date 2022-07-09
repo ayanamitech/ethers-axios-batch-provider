@@ -11,7 +11,7 @@ function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'defau
 var axios__default = /*#__PURE__*/_interopDefaultLegacy(axios);
 var MockAdapter__default = /*#__PURE__*/_interopDefaultLegacy(MockAdapter);
 
-const version = "ethers-axios-batch-provider@5.6.9";
+const version = "ethers-axios-batch-provider@5.6.10";
 
 const logger = new ethers.utils.Logger(version);
 class AxiosBatchProvider extends ethers.providers.JsonRpcProvider {
@@ -96,17 +96,31 @@ class AxiosBatchProvider extends ethers.providers.JsonRpcProvider {
         this._pendingBatchAggregator = null;
         const request = batch.map((inflight) => inflight.request);
         return axiosAuto.post(url, JSON.stringify(request), options).then((result) => {
-          batch.forEach((inflightRequest2, index) => {
-            const payload2 = result[index];
-            if (payload2.error) {
-              const error = new Error(payload2.error.message);
-              error.code = payload2.error.code;
-              error.data = payload2.error.data;
-              inflightRequest2.reject(error);
-            } else {
-              inflightRequest2.resolve(payload2.result);
-            }
-          });
+          if (!Array.isArray(result) || result.length === 1) {
+            const payload2 = !Array.isArray(result) ? result : result[0];
+            batch.forEach((inflightRequest2) => {
+              if (payload2.error) {
+                const error = new Error(payload2.error.message);
+                error.code = payload2.error.code;
+                error.data = payload2.error.data;
+                inflightRequest2.reject(error);
+              } else {
+                inflightRequest2.resolve(payload2.result);
+              }
+            });
+          } else {
+            batch.forEach((inflightRequest2, index) => {
+              const payload2 = result[index];
+              if (payload2.error) {
+                const error = new Error(payload2.error.message);
+                error.code = payload2.error.code;
+                error.data = payload2.error.data;
+                inflightRequest2.reject(error);
+              } else {
+                inflightRequest2.resolve(payload2.result);
+              }
+            });
+          }
         }, (error) => {
           batch.forEach((inflightRequest2) => {
             inflightRequest2.reject(error);

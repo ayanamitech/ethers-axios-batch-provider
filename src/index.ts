@@ -134,20 +134,33 @@ export default class AxiosBatchProvider extends providers.JsonRpcProvider {
         const request = batch.map((inflight) => inflight.request);
 
         return post(url, JSON.stringify(request), options).then((result) => {
-          // For each result, feed it to the correct Promise, depending
-          // on whether it was a success or error
-          batch.forEach((inflightRequest, index) => {
-            const payload = result[index];
-            if (payload.error) {
-              const error = new Error(payload.error.message);
-              (<any>error).code = payload.error.code;
-              (<any>error).data = payload.error.data;
-              inflightRequest.reject(error);
-            } else {
-              inflightRequest.resolve(payload.result);
-            }
-          });
-
+          if (!Array.isArray(result) || result.length === 1) {
+            const payload = !Array.isArray(result) ? result : result[0];
+            batch.forEach((inflightRequest) => {
+              if (payload.error) {
+                const error = new Error(payload.error.message);
+                (<any>error).code = payload.error.code;
+                (<any>error).data = payload.error.data;
+                inflightRequest.reject(error);
+              } else {
+                inflightRequest.resolve(payload.result);
+              }
+            });
+          } else {
+            // For each result, feed it to the correct Promise, depending
+            // on whether it was a success or error
+            batch.forEach((inflightRequest, index) => {
+              const payload = result[index];
+              if (payload.error) {
+                const error = new Error(payload.error.message);
+                (<any>error).code = payload.error.code;
+                (<any>error).data = payload.error.data;
+                inflightRequest.reject(error);
+              } else {
+                inflightRequest.resolve(payload.result);
+              }
+            });
+          }
         }, (error) => {
           batch.forEach((inflightRequest) => {
             inflightRequest.reject(error);

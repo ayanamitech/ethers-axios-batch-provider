@@ -37,8 +37,8 @@ It supports sending several Request objects and will expect to receive array of 
 **Node.js**
 
 ```bash
-# Wouldn't work without axios or axios-auto installed
-npm i --save axios axios-auto ethers ethers-axios-batch-provider
+# Wouldn't work without axios or ethers installed
+npm i --save axios ethers ethers-axios-batch-provider
 ```
 
 ## Documentation
