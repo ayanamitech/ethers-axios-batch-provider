@@ -37,6 +37,9 @@ export default class AxiosBatchProvider extends providers.JsonRpcProvider {
       Object.assign(axiosConfig, extraConfig);
     }
 
+    axiosConfig.headers ||= {};
+    axiosConfig.headers['Content-Type'] ||= 'application/json;charset=utf-8';
+
     // Tell JsonRpcProvider only one node (While send queries to multiple nodes at once)
     super(axiosConfig.url.replace(/\s+/g, '').split(',')[0], network);
     this.axiosConfig = axiosConfig;
@@ -70,41 +73,39 @@ export default class AxiosBatchProvider extends providers.JsonRpcProvider {
       throw new Error('AxiosBatchProvider: eth_sendRawTransaction not supported with multiple nodes');
     }
 
-    if (options.filter === undefined) {
-      /**
-       * Filter rpc node generated error
-       */
-      const filter: filter = (data: any, count?: number, retryMax?: number) => {
-        if (typeof count === 'number' && typeof retryMax === 'number' && data.error) {
-          const message: string = (typeof data.error.message === 'string')
-            ? data.error.message : (typeof data.error === 'string')
-              ? data.error : (typeof data.error === 'object')
-                ? JSON.stringify(data.error) : '';
-          // Throw error to retry inside axios-auto function
-          if (count < retryMax + 1) {
-            throw new Error(message);
-          }
-        } else if (Array.isArray(data)) {
-          const errorArray = data.map((d: any) => {
-            if (typeof count === 'number' && typeof retryMax === 'number' && d.error) {
-              const message: string = (typeof d.error.message === 'string')
-                ? d.error.message : (typeof d.error === 'string')
-                  ? d.error : (typeof d.error === 'object')
-                    ? JSON.stringify(d.error) : '';
-              // Throw error to retry inside axios-auto function
-              if (count < retryMax + 1) {
-                return new Error(message);
-              }
-            }
-          }).filter(d => d);
-          if (errorArray.length > 0) {
-            throw errorArray;
-          }
+    /**
+     * Filter rpc node generated error
+     */
+    const filter: filter = (data: any, count?: number, retryMax?: number) => {
+      if (typeof count === 'number' && typeof retryMax === 'number' && data.error) {
+        const message: string = (typeof data.error.message === 'string')
+          ? data.error.message : (typeof data.error === 'string')
+            ? data.error : (typeof data.error === 'object')
+              ? JSON.stringify(data.error) : '';
+        // Throw error to retry inside axios-auto function
+        if (count < retryMax + 1) {
+          throw new Error(message);
         }
-      };
+      } else if (Array.isArray(data)) {
+        const errorArray = data.map((d: any) => {
+          if (typeof count === 'number' && typeof retryMax === 'number' && d.error) {
+            const message: string = (typeof d.error.message === 'string')
+              ? d.error.message : (typeof d.error === 'string')
+                ? d.error : (typeof d.error === 'object')
+                  ? JSON.stringify(d.error) : '';
+            // Throw error to retry inside axios-auto function
+            if (count < retryMax + 1) {
+              return new Error(message);
+            }
+          }
+        }).filter(d => d);
+        if (errorArray.length > 0) {
+          throw errorArray;
+        }
+      }
+    };
 
-      options.filter = filter;
-    }
+    options.filter ||= filter;
 
     if (this._pendingBatch == null) {
       this._pendingBatch = [];

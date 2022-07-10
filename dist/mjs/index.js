@@ -25,11 +25,12 @@
 import { post } from 'axios-auto';
 import { utils, providers } from 'ethers';
 
-const version = "ethers-axios-batch-provider@5.6.10";
+const version = "ethers-axios-batch-provider@5.6.11";
 
 const logger = new utils.Logger(version);
 class AxiosBatchProvider extends providers.JsonRpcProvider {
   constructor(urlOrConfig, extraConfig, network) {
+    var _a;
     if (typeof urlOrConfig === "object" && !urlOrConfig.url) {
       logger.throwArgumentError("missing node url", "urlOrConfig", urlOrConfig);
     }
@@ -42,6 +43,8 @@ class AxiosBatchProvider extends providers.JsonRpcProvider {
     if (extraConfig) {
       Object.assign(axiosConfig, extraConfig);
     }
+    axiosConfig.headers || (axiosConfig.headers = {});
+    (_a = axiosConfig.headers)["Content-Type"] || (_a["Content-Type"] = "application/json;charset=utf-8");
     super(axiosConfig.url.replace(/\s+/g, "").split(",")[0], network);
     this.requestId = 1;
     this.axiosConfig = axiosConfig;
@@ -70,29 +73,27 @@ class AxiosBatchProvider extends providers.JsonRpcProvider {
     if (sendTransaction && url.replace(/\s+/g, "").split(",").length > 0) {
       throw new Error("AxiosBatchProvider: eth_sendRawTransaction not supported with multiple nodes");
     }
-    if (options.filter === void 0) {
-      const filter = (data, count, retryMax) => {
-        if (typeof count === "number" && typeof retryMax === "number" && data.error) {
-          const message = typeof data.error.message === "string" ? data.error.message : typeof data.error === "string" ? data.error : typeof data.error === "object" ? JSON.stringify(data.error) : "";
-          if (count < retryMax + 1) {
-            throw new Error(message);
-          }
-        } else if (Array.isArray(data)) {
-          const errorArray = data.map((d) => {
-            if (typeof count === "number" && typeof retryMax === "number" && d.error) {
-              const message = typeof d.error.message === "string" ? d.error.message : typeof d.error === "string" ? d.error : typeof d.error === "object" ? JSON.stringify(d.error) : "";
-              if (count < retryMax + 1) {
-                return new Error(message);
-              }
-            }
-          }).filter((d) => d);
-          if (errorArray.length > 0) {
-            throw errorArray;
-          }
+    const filter = (data, count, retryMax) => {
+      if (typeof count === "number" && typeof retryMax === "number" && data.error) {
+        const message = typeof data.error.message === "string" ? data.error.message : typeof data.error === "string" ? data.error : typeof data.error === "object" ? JSON.stringify(data.error) : "";
+        if (count < retryMax + 1) {
+          throw new Error(message);
         }
-      };
-      options.filter = filter;
-    }
+      } else if (Array.isArray(data)) {
+        const errorArray = data.map((d) => {
+          if (typeof count === "number" && typeof retryMax === "number" && d.error) {
+            const message = typeof d.error.message === "string" ? d.error.message : typeof d.error === "string" ? d.error : typeof d.error === "object" ? JSON.stringify(d.error) : "";
+            if (count < retryMax + 1) {
+              return new Error(message);
+            }
+          }
+        }).filter((d) => d);
+        if (errorArray.length > 0) {
+          throw errorArray;
+        }
+      }
+    };
+    options.filter || (options.filter = filter);
     if (this._pendingBatch == null) {
       this._pendingBatch = [];
     }
