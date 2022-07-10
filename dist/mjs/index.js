@@ -25,7 +25,7 @@
 import { post } from 'axios-auto';
 import { utils, providers } from 'ethers';
 
-const version = "ethers-axios-batch-provider@5.6.11";
+const version = "ethers-axios-batch-provider@5.6.12";
 
 const logger = new utils.Logger(version);
 class AxiosBatchProvider extends providers.JsonRpcProvider {
@@ -45,6 +45,7 @@ class AxiosBatchProvider extends providers.JsonRpcProvider {
     }
     axiosConfig.headers || (axiosConfig.headers = {});
     (_a = axiosConfig.headers)["Content-Type"] || (_a["Content-Type"] = "application/json;charset=utf-8");
+    axiosConfig.timeout || (axiosConfig.timeout = 6e4);
     super(axiosConfig.url.replace(/\s+/g, "").split(",")[0], network);
     this.requestId = 1;
     this.axiosConfig = axiosConfig;
@@ -74,22 +75,32 @@ class AxiosBatchProvider extends providers.JsonRpcProvider {
       throw new Error("AxiosBatchProvider: eth_sendRawTransaction not supported with multiple nodes");
     }
     const filter = (data, count, retryMax) => {
-      if (typeof count === "number" && typeof retryMax === "number" && data.error) {
-        const message = typeof data.error.message === "string" ? data.error.message : typeof data.error === "string" ? data.error : typeof data.error === "object" ? JSON.stringify(data.error) : "";
-        if (count < retryMax + 1) {
-          throw new Error(message);
-        }
-      } else if (Array.isArray(data)) {
-        const errorArray = data.map((d) => {
-          if (typeof count === "number" && typeof retryMax === "number" && d.error) {
-            const message = typeof d.error.message === "string" ? d.error.message : typeof d.error === "string" ? d.error : typeof d.error === "object" ? JSON.stringify(d.error) : "";
-            if (count < retryMax + 1) {
+      if (typeof count === "number" && typeof retryMax === "number") {
+        if (Array.isArray(data)) {
+          const errorArray = data.map((d) => {
+            let message;
+            if (d.error) {
+              message = typeof d.error.message === "string" ? d.error.message : typeof d.error === "string" ? d.error : typeof d.error === "object" ? JSON.stringify(d.error) : "";
+            } else if (typeof d.result === "undefined") {
+              message = typeof d === "string" ? d : typeof d === "object" ? JSON.stringify(d) : "Result not available from remote node";
+            }
+            if (typeof message !== "undefined" && count < retryMax + 1) {
               return new Error(message);
             }
+          }).filter((d) => d);
+          if (errorArray.length > 0) {
+            throw errorArray;
           }
-        }).filter((d) => d);
-        if (errorArray.length > 0) {
-          throw errorArray;
+        } else {
+          let message;
+          if (data.error) {
+            message = typeof data.error.message === "string" ? data.error.message : typeof data.error === "string" ? data.error : typeof data.error === "object" ? JSON.stringify(data.error) : "";
+          } else if (typeof data.result === "undefined") {
+            message = typeof data === "string" ? data : typeof data === "object" ? JSON.stringify(data) : "Result not available from remote node";
+          }
+          if (typeof message !== "undefined" && count < retryMax + 1) {
+            throw new Error(message);
+          }
         }
       }
     };
@@ -119,6 +130,9 @@ class AxiosBatchProvider extends providers.JsonRpcProvider {
                 error.code = payload2.error.code;
                 error.data = payload2.error.data;
                 inflightRequest2.reject(error);
+              } else if (typeof payload2.result === "undefined") {
+                const msg = typeof payload2 === "string" ? payload2 : typeof payload2 === "object" ? JSON.stringify(payload2) : "Result not available from remote node";
+                inflightRequest2.reject(new Error(msg));
               } else {
                 inflightRequest2.resolve(payload2.result);
               }
@@ -131,6 +145,9 @@ class AxiosBatchProvider extends providers.JsonRpcProvider {
                 error.code = payload2.error.code;
                 error.data = payload2.error.data;
                 inflightRequest2.reject(error);
+              } else if (typeof payload2.result === "undefined") {
+                const msg = typeof payload2 === "string" ? payload2 : typeof payload2 === "object" ? JSON.stringify(payload2) : "Result not available from remote node";
+                inflightRequest2.reject(new Error(msg));
               } else {
                 inflightRequest2.resolve(payload2.result);
               }
