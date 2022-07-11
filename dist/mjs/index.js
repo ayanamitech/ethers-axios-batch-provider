@@ -25,7 +25,7 @@
 import { post } from 'axios-auto';
 import { utils, providers } from 'ethers';
 
-const version = "ethers-axios-batch-provider@5.6.15";
+const version = "ethers-axios-batch-provider@5.6.16";
 
 const logger = new utils.Logger(version);
 class AxiosBatchProvider extends providers.JsonRpcProvider {
