@@ -11,7 +11,7 @@ function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'defau
 var axios__default = /*#__PURE__*/_interopDefaultLegacy(axios);
 var MockAdapter__default = /*#__PURE__*/_interopDefaultLegacy(MockAdapter);
 
-const version = "ethers-axios-batch-provider@5.6.16";
+const version = "ethers-axios-batch-provider@5.6.17";
 
 const logger = new ethers.utils.Logger(version);
 class AxiosBatchProvider extends ethers.providers.JsonRpcProvider {

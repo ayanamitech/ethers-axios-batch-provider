@@ -1,1 +1,1 @@
-export const version = 'ethers-axios-batch-provider@5.6.16';
+export const version = 'ethers-axios-batch-provider@5.6.17';
