@@ -27,7 +27,7 @@
 var axiosAuto = require('axios-auto');
 var ethers = require('ethers');
 
-const version = "ethers-axios-batch-provider@5.6.19";
+const version = "ethers-axios-batch-provider@5.6.20";
 
 const logger = new ethers.utils.Logger(version);
 class AxiosBatchProvider extends ethers.providers.JsonRpcProvider {
