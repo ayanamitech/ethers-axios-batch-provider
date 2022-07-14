@@ -1,6 +1,6 @@
 {
   "name": "ethers-axios-batch-provider",
-  "version": "5.6.21",
+  "version": "5.6.22",
   "description": "Fastest, fault tolerant multi node ethers.js compatible JSONRPC Batch provider",
   "main": "./dist/cjs/index.js",
   "module": "./dist/mjs/index.js",
@@ -78,6 +78,6 @@
     "ethers": "^5.6.9"
   },
   "dependencies": {
-    "axios-auto": "^0.28.21"
+    "axios-auto": "^0.28.22"
   }
 }
